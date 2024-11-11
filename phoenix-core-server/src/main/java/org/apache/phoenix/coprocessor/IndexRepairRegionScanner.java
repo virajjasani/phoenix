@@ -34,6 +34,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -120,7 +121,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                 del.add(cell);
             }
         }
-        List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
+        List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del, null);
         Collections.reverse(indexMutations);
         for (Mutation mutation : indexMutations) {
             byte[] indexRowKey = mutation.getRow();
@@ -483,5 +484,9 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         }
         results.add(aggKeyValue);
         return hasMore || hasMoreIncr;
+    }
+
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        return next(result);
     }
 }

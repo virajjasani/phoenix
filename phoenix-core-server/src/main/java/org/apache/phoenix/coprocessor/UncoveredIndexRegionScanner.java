@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.execute.TupleProjector;
@@ -299,7 +300,14 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         for (Cell cell : dataRow.rawCells()) {
             put.add(cell);
         }
-        if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
+        if (indexMaintainer.isCDCIndex()) {
+            // A CDC index row key is PARTITION_ID() + PHOENIX_ROW_TIMESTAMP() + data row key. The
+            // only necessary check is the row timestamp check since the data row key is extracted
+            // from the index row key and PARTITION_ID() changes during region splits and merges
+            if (IndexUtil.getMaxTimestamp(put) == indexTimestamp) {
+                return true;
+            }
+        } else if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
             if (IndexUtil.getMaxTimestamp(put) != indexTimestamp) {
                 Mutation[] mutations;
                 Put indexPut = new Put(indexRowKey);
@@ -315,8 +323,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             }
             return true;
         }
+        // This is not a valid index row
         if (indexMaintainer.isAgedEnough(IndexUtil.getMaxTimestamp(put), ageThreshold)) {
-            region.delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put), false));
+            region.delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put),
+                    false));
         }
         return false;
     }
@@ -365,6 +375,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         } else {
             return false;
         }
+    }
+
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        return next(result);
     }
 
     /**

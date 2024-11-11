@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
@@ -151,7 +152,8 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         ValueGetter valueGetter = new IndexUtil.SimpleValueGetter(dataRow);
         long ts = IndexUtil.getMaxTimestamp(dataRow);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-                valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null, false);
+                valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null,
+                false, region.getRegionInfo().getEncodedNameAsBytes());
 
         if (indexPut == null) {
             // This means the data row does not have any covered column values
@@ -371,6 +373,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
     public boolean next(List<Cell> results) throws IOException {
         Cell lastCell = null;
         int rowCount = 0;
+        byte[] encodedRegionName = region.getRegionInfo().getEncodedNameAsBytes();
         region.startRegionOperation();
         try {
             synchronized (innerScanner) {
@@ -416,7 +419,8 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                             uuidValue = commitIfReady(uuidValue, mutations);
                         } else {
                             indexKeyToDataPutMap
-                                    .put(indexMaintainer.getIndexRowKey(put), put);
+                                    .put(indexMaintainer.getIndexRowKey(put, encodedRegionName),
+                                            put);
                         }
                         rowCount++;
 
@@ -480,5 +484,9 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
     @Override
     public long getMaxResultSize() {
         return scan.getMaxResultSize();
+    }
+
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        return next(result);
     }
 }
